@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 // ExportFormat represents available export formats
@@ -362,7 +364,10 @@ func generateJobID(owner, repo string) string {
 
 // calculateNextRun calculates the next run time based on cron expression
 func calculateNextRun(cronExpr string) time.Time {
-	// Simple implementation - in production, use the cron library to parse
-	// For now, return a time 24 hours from now as a placeholder
-	return time.Now().Add(24 * time.Hour)
+	schedule, err := cron.ParseStandard(cronExpr)
+	if err != nil {
+		// Fallback if the expression is invalid
+		return time.Now().Add(24 * time.Hour)
+	}
+	return schedule.Next(time.Now())
 }
