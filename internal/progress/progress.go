@@ -60,7 +60,7 @@ func (s *Spinner) Stop() {
 	s.stopChan <- true
 
 	// Clear the line
-	fmt.Print("\r" + clearLine())
+	fmt.Print(clearLine())
 }
 
 // StopWithMessage stops the spinner and displays a completion message
@@ -76,7 +76,7 @@ func (s *Spinner) StopWithMessage(message string) {
 	s.stopChan <- true
 
 	// Display the completion message
-	fmt.Printf("\r✓ %s\n", message)
+	fmt.Printf("\r✓ %s\033[K\n", message)
 	s.completed = true
 }
 
@@ -100,7 +100,7 @@ func (s *Spinner) animate() {
 			s.mu.Lock()
 			if s.active {
 				frame := s.frames[frameIndex%len(s.frames)]
-				fmt.Printf("\r%s %s", frame, s.message)
+				fmt.Printf("\r%s %s\033[K", frame, s.message)
 			}
 			s.mu.Unlock()
 
@@ -284,6 +284,7 @@ type OverallProgress struct {
 	mu             sync.Mutex
 	spinner        *Spinner
 	startTime      time.Time
+	stepStartTime  time.Time
 }
 
 // NewOverallProgress creates a new overall progress tracker
@@ -296,6 +297,7 @@ func NewOverallProgress(totalSteps int) *OverallProgress {
 		currentStep:    "",
 		spinner:        NewSpinner(),
 		startTime:      time.Now(),
+		stepStartTime:  time.Now(),
 	}
 }
 
@@ -303,13 +305,52 @@ func NewOverallProgress(totalSteps int) *OverallProgress {
 // This updates the current step display and starts the spinner
 func (o *OverallProgress) StartStep(stepMessage string) {
 	o.mu.Lock()
-	defer o.mu.Unlock()
 
 	o.currentStep = stepMessage
+	o.stepStartTime = time.Now()
+
 	percentage := o.calculatePercentage()
 
-	message := fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps+1, o.totalSteps, percentage)
+	message := fmt.Sprintf(
+		"%s [%d/%d - %d%%] (0s elapsed)",
+		stepMessage,
+		o.completedSteps+1,
+		o.totalSteps,
+		percentage,
+	)
+
 	o.spinner.Start(message)
+	o.mu.Unlock()
+
+	// Continuously update elapsed time while spinner is active
+	go func(step string) {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			o.mu.Lock()
+
+			// Stop updating if step changed
+			if o.currentStep != step {
+				o.mu.Unlock()
+				return
+			}
+
+			elapsed := int(time.Since(o.stepStartTime).Seconds())
+
+			updatedMessage := fmt.Sprintf(
+				"%s [%d/%d - %d%%] (%ds elapsed)",
+				step,
+				o.completedSteps+1,
+				o.totalSteps,
+				o.calculatePercentage(),
+				elapsed,
+			)
+
+			o.spinner.Update(updatedMessage)
+			o.mu.Unlock()
+		}
+	}(stepMessage)
 }
 
 // CompleteStep marks the current step as complete and moves to the next
@@ -320,7 +361,15 @@ func (o *OverallProgress) CompleteStep(stepMessage string) {
 	o.completedSteps++
 	percentage := o.calculatePercentage()
 
-	o.spinner.StopWithMessage(fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps, o.totalSteps, percentage))
+	o.spinner.StopWithMessage(
+		fmt.Sprintf(
+			"%s [%d/%d - %d%%]",
+			stepMessage,
+			o.completedSteps,
+			o.totalSteps,
+			percentage,
+		),
+	)
 }
 
 // CompleteStepWithDetails marks the current step as complete with additional details
@@ -331,7 +380,15 @@ func (o *OverallProgress) CompleteStepWithDetails(stepMessage string) {
 	o.completedSteps++
 	percentage := o.calculatePercentage()
 
-	o.spinner.StopWithMessage(fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps, o.totalSteps, percentage))
+	o.spinner.StopWithMessage(
+		fmt.Sprintf(
+			"%s [%d/%d - %d%%]",
+			stepMessage,
+			o.completedSteps,
+			o.totalSteps,
+			percentage,
+		),
+	)
 }
 
 // UpdateStep updates the current step message without stopping the spinner
@@ -341,8 +398,17 @@ func (o *OverallProgress) UpdateStep(stepMessage string) {
 
 	o.currentStep = stepMessage
 	percentage := o.calculatePercentage()
+	elapsed := int(time.Since(o.stepStartTime).Seconds())
 
-	message := fmt.Sprintf("%s [%d/%d - %d%%]", stepMessage, o.completedSteps+1, o.totalSteps, percentage)
+	message := fmt.Sprintf(
+		"%s [%d/%d - %d%%] (%ds elapsed)",
+		stepMessage,
+		o.completedSteps+1,
+		o.totalSteps,
+		percentage,
+		elapsed,
+	)
+
 	o.spinner.Update(message)
 }
 
