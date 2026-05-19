@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
+	"github.com/agnivo988/Repo-lyzer/internal/contribution"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 )
 
@@ -29,6 +30,7 @@ type AnalysisResult struct {
 	Issues              []github.Issue
 	PRs                 []github.PullRequest
 	MaintainerAnalysis  *analyzer.MaintainerAnalysis
+	ContributionScore   contribution.ContributionScore
 }
 
 // CachedAnalysisResult wraps AnalysisResult with cache metadata

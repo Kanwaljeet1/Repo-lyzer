@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer"
 	"github.com/agnivo988/Repo-lyzer/internal/cache"
 	"github.com/agnivo988/Repo-lyzer/internal/config"
+	"github.com/agnivo988/Repo-lyzer/internal/contribution"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -1012,6 +1014,21 @@ func (m MainModel) analyzeRepo(ctx context.Context, repoName string) tea.Cmd {
 			contributors,
 		)
 
+		// Fetch README content and calculate contribution score
+		hasContributing := contribution.CheckContributingFile(fileTree)
+		readmeContent := ""
+		readmePath := contribution.FindReadmePath(fileTree)
+		if readmePath != "" {
+			readmeBase64, err := client.GetFileContent(parts[0], parts[1], readmePath)
+			if err == nil {
+				decoded, err := base64.StdEncoding.DecodeString(readmeBase64)
+				if err == nil {
+					readmeContent = string(decoded)
+				}
+			}
+		}
+		contribScore := contribution.Calculate(hasContributing, readmeContent, issues, commits, contributors)
+
 		result := AnalysisResult{
 			Repo:                repo,
 			Commits:             commits,
@@ -1032,6 +1049,7 @@ func (m MainModel) analyzeRepo(ctx context.Context, repoName string) tea.Cmd {
 			Issues:              issues,
 			PRs:                 prs,
 			MaintainerAnalysis:  maintainerAnalysis,
+			ContributionScore:   contribScore,
 		}
 
 		// Save to cache
