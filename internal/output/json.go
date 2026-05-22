@@ -1,6 +1,8 @@
 package output
 
 import (
+	"encoding/json"
+	"os"
 	"fmt"
 	"strings"
 
