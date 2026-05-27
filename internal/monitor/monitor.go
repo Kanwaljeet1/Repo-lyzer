@@ -22,8 +22,8 @@ type MonitorState struct {
 	Owner                string    `json:"owner"`
 	Repo                 string    `json:"repo"`
 	LastCommitSHA        string    `json:"last_commit_sha"`
-	LastIssueID          int       `json:"last_issue_id"`
-	LastPRID             int       `json:"last_pr_id"`
+	LastIssueCount       int       `json:"last_issue_id"`
+	LastPRCount          int       `json:"last_pr_id"`
 	LastContributorCount int       `json:"last_contributor_count"`
 	LastUpdated          time.Time `json:"last_updated"`
 }
@@ -188,6 +188,28 @@ func (m *Monitor) checkCommits() {
 	}
 }
 
+// countIssues returns the number of true issues (PullRequest == nil) in the list.
+func countIssues(items []github.Issue) int {
+	count := 0
+	for _, item := range items {
+		if item.PullRequest == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// countPRs returns the number of pull requests (PullRequest != nil) in the list.
+func countPRs(items []github.Issue) int {
+	count := 0
+	for _, item := range items {
+		if item.PullRequest != nil {
+			count++
+		}
+	}
+	return count
+}
+
 // checkIssues monitors for new issues (excludes pull requests)
 func (m *Monitor) checkIssues() {
 	issues, err := m.client.GetIssues(m.owner, m.repo, "open")
@@ -196,17 +218,10 @@ func (m *Monitor) checkIssues() {
 		return
 	}
 
-	// Filter out pull requests – the GitHub Issues API returns both issues
-	// and PRs; items with a non-nil PullRequest field are pull requests.
-	var actualIssuesCount int
-	for _, issue := range issues {
-		if issue.PullRequest == nil {
-			actualIssuesCount++
-		}
-	}
+	actualIssuesCount := countIssues(issues)
 
 	// Only notify when the count actually changes
-	if actualIssuesCount != m.state.LastIssueID {
+	if actualIssuesCount != m.state.LastIssueCount {
 		notification := Notification{
 			Type:      "issue",
 			Title:     "Issues Update",
@@ -215,7 +230,7 @@ func (m *Monitor) checkIssues() {
 			Severity:  "info",
 		}
 		m.notifications <- notification
-		m.state.LastIssueID = actualIssuesCount
+		m.state.LastIssueCount = actualIssuesCount
 	}
 }
 
@@ -227,17 +242,10 @@ func (m *Monitor) checkPullRequests() {
 		return
 	}
 
-	// Filter for pull requests only – the GitHub Issues API returns both
-	// issues and PRs; items with a non-nil PullRequest field are pull requests.
-	var actualPRCount int
-	for _, issue := range issues {
-		if issue.PullRequest != nil {
-			actualPRCount++
-		}
-	}
+	actualPRCount := countPRs(issues)
 
 	// Only notify when the PR count actually changes
-	if actualPRCount != m.state.LastPRID {
+	if actualPRCount != m.state.LastPRCount {
 		notification := Notification{
 			Type:      "pr",
 			Title:     "Pull Requests Update",
@@ -246,7 +254,7 @@ func (m *Monitor) checkPullRequests() {
 			Severity:  "info",
 		}
 		m.notifications <- notification
-		m.state.LastPRID = actualPRCount
+		m.state.LastPRCount = actualPRCount
 	}
 }
 

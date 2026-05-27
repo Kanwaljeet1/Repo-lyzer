@@ -107,8 +107,8 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 	notifications := make(chan Notification, 100)
 
 	state := &MonitorState{
-		LastIssueID: 3,
-		LastPRID:    2,
+		LastIssueCount: 3,
+		LastPRCount:    2,
 	}
 
 	prMarker := &struct{}{}
@@ -122,7 +122,7 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 
 	// Simulate checkIssues logic
 	issueCount := filterIssues(items)
-	if issueCount != state.LastIssueID {
+	if issueCount != state.LastIssueCount {
 		notifications <- Notification{
 			Type:      "issue",
 			Title:     "Issues Update",
@@ -130,12 +130,12 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 			Timestamp: time.Now(),
 			Severity:  "info",
 		}
-		state.LastIssueID = issueCount
+		state.LastIssueCount = issueCount
 	}
 
 	// Simulate checkPullRequests logic
 	prCount := filterPRs(items)
-	if prCount != state.LastPRID {
+	if prCount != state.LastPRCount {
 		notifications <- Notification{
 			Type:      "pr",
 			Title:     "Pull Requests Update",
@@ -143,15 +143,15 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 			Timestamp: time.Now(),
 			Severity:  "info",
 		}
-		state.LastPRID = prCount
+		state.LastPRCount = prCount
 	}
 
 	// Verify state was updated correctly
-	if state.LastIssueID != 3 {
-		t.Errorf("LastIssueID = %d, want 3", state.LastIssueID)
+	if state.LastIssueCount != 3 {
+		t.Errorf("LastIssueCount = %d, want 3", state.LastIssueCount)
 	}
-	if state.LastPRID != 2 {
-		t.Errorf("LastPRID = %d, want 2", state.LastPRID)
+	if state.LastPRCount != 2 {
+		t.Errorf("LastPRCount = %d, want 2", state.LastPRCount)
 	}
 
 	// No notifications should have been sent because the counts match
@@ -162,7 +162,7 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 	// Now simulate a state change (new issue added)
 	items = append(items, github.Issue{Number: 6, Title: "New Bug", PullRequest: nil})
 	issueCount = filterIssues(items)
-	if issueCount != state.LastIssueID {
+	if issueCount != state.LastIssueCount {
 		notifications <- Notification{
 			Type:      "issue",
 			Title:     "Issues Update",
@@ -170,7 +170,7 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 			Timestamp: time.Now(),
 			Severity:  "info",
 		}
-		state.LastIssueID = issueCount
+		state.LastIssueCount = issueCount
 	}
 
 	if len(notifications) != 1 {
@@ -181,7 +181,7 @@ func TestNotification_OnlyOnStateChange(t *testing.T) {
 	if n.Type != "issue" {
 		t.Errorf("Notification type = %q, want %q", n.Type, "issue")
 	}
-	if state.LastIssueID != 4 {
-		t.Errorf("LastIssueID after update = %d, want 4", state.LastIssueID)
+	if state.LastIssueCount != 4 {
+		t.Errorf("LastIssueCount after update = %d, want 4", state.LastIssueCount)
 	}
 }
