@@ -105,12 +105,14 @@ func (m PushInputModel) Update(msg tea.Msg) (PushInputModel, tea.Cmd) {
 		case tea.KeyBackspace:
 			if m.Step == 0 {
 				if len(m.LocalPath) > 0 {
-					m.LocalPath = m.LocalPath[:len(m.LocalPath)-1]
+					runes := []rune(m.LocalPath)
+					m.LocalPath = string(runes[:len(runes)-1])
 					m.Err = nil
 				}
 			} else {
 				if len(m.RepoName) > 0 {
-					m.RepoName = m.RepoName[:len(m.RepoName)-1]
+					runes := []rune(m.RepoName)
+					m.RepoName = string(runes[:len(runes)-1])
 					m.Err = nil
 				}
 			}
