@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/agnivo988/Repo-lyzer/internal/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -81,6 +82,13 @@ func (m FileEditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "✓ Opened in editor"
 		}
 
+	case pushResultMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Push failed: %v", msg.err)
+		} else {
+			m.statusMsg = "✓ Pushed changes successfully!"
+		}
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "v":
@@ -96,6 +104,12 @@ func (m FileEditModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Open cloned repo in VS Code
 			if m.isCloned {
 				return m, m.openClonedInVSCode()
+			}
+		case "p":
+			// Push changes to GitHub repository
+			if m.isCloned {
+				m.statusMsg = "Pushing to GitHub..."
+				return m, m.pushToGitHub()
 			}
 		case "esc":
 			m.Done = true
@@ -133,8 +147,10 @@ func (m FileEditModel) View() string {
 	content += "  [c] Clone repository to Desktop\n"
 	if m.isCloned {
 		content += SuccessStyle.Render("  [o] Open cloned repo in VS Code (new window)\n")
+		content += SuccessStyle.Render("  [p] Push changes to GitHub repository\n")
 	} else {
 		content += SubtleStyle.Render("  [o] Open cloned repo (clone first)\n")
+		content += SubtleStyle.Render("  [p] Push changes (clone first)\n")
 	}
 
 	if m.statusMsg != "" {
@@ -326,5 +342,87 @@ func (m FileEditModel) openClonedInVSCode() tea.Cmd {
 		}
 
 		return openResultMsg{err}
+	}
+}
+
+type pushResultMsg struct {
+	err error
+}
+
+// pushToGitHub stages, commits, and pushes any local changes to GitHub
+func (m FileEditModel) pushToGitHub() tea.Cmd {
+	return func() tea.Msg {
+		// 1. Get current branch
+		cmdBranch := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+		cmdBranch.Dir = m.clonePath
+		branchBytes, err := cmdBranch.Output()
+		if err != nil {
+			return pushResultMsg{fmt.Errorf("failed to detect branch: %w", err)}
+		}
+		branch := strings.TrimSpace(string(branchBytes))
+		if branch == "" {
+			branch = "main"
+		}
+
+		// 2. Check if there are local uncommitted changes
+		cmdStatus := exec.Command("git", "status", "--porcelain")
+		cmdStatus.Dir = m.clonePath
+		statusBytes, _ := cmdStatus.Output()
+		hasChanges := len(strings.TrimSpace(string(statusBytes))) > 0
+
+		// 3. Stage and commit if there are changes
+		if hasChanges {
+			cmdAdd := exec.Command("git", "add", ".")
+			cmdAdd.Dir = m.clonePath
+			if err := cmdAdd.Run(); err != nil {
+				return pushResultMsg{fmt.Errorf("failed to stage files: %w", err)}
+			}
+
+			cmdCommit := exec.Command("git", "commit", "-m", "Update via Repo-lyzer")
+			cmdCommit.Dir = m.clonePath
+			if err := cmdCommit.Run(); err != nil {
+				return pushResultMsg{fmt.Errorf("failed to commit files: %w", err)}
+			}
+		}
+
+		// 4. Check if token is available
+		settings, err := config.LoadSettings()
+		var originalURL string
+		hasCustomRemote := false
+
+		if err == nil && settings.GitHubToken != "" {
+			// Get original remote URL so we can restore it later if needed
+			cmdGetRemote := exec.Command("git", "remote", "get-url", "origin")
+			cmdGetRemote.Dir = m.clonePath
+			origBytes, err := cmdGetRemote.Output()
+			if err == nil {
+				originalURL = strings.TrimSpace(string(origBytes))
+				// Set remote URL with token for pushing
+				authURL := fmt.Sprintf("https://%s@github.com/%s/%s.git", settings.GitHubToken, m.repoOwner, m.repoName)
+				cmdSetRemote := exec.Command("git", "remote", "set-url", "origin", authURL)
+				cmdSetRemote.Dir = m.clonePath
+				if err := cmdSetRemote.Run(); err == nil {
+					hasCustomRemote = true
+				}
+			}
+		}
+
+		// Restore remote URL on function exit if we changed it
+		defer func() {
+			if hasCustomRemote && originalURL != "" {
+				cmdRestore := exec.Command("git", "remote", "set-url", "origin", originalURL)
+				cmdRestore.Dir = m.clonePath
+				_ = cmdRestore.Run()
+			}
+		}()
+
+		// 5. Push to GitHub
+		cmdPush := exec.Command("git", "push", "origin", branch)
+		cmdPush.Dir = m.clonePath
+		if err := cmdPush.Run(); err != nil {
+			return pushResultMsg{fmt.Errorf("failed to push: %w", err)}
+		}
+
+		return pushResultMsg{nil}
 	}
 }

@@ -41,6 +41,8 @@ const (
 	stateCompareResult
 	stateCloneInput
 	stateCloning
+	statePushInput
+	statePushing
 	stateNotifications
 	stateMonitorDashboard
 )
@@ -82,6 +84,8 @@ type MainModel struct {
 	favorites        *FavoritesModel
 	cloneInput       CloneInputModel
 	cloning          CloningModel
+	pushInput        PushInputModel
+	pushing          PushingModel
 	notifications    NotificationsModel
 	monitorDashboard MonitorDashboardModel
 
@@ -136,6 +140,8 @@ func NewMainModel(cache *cache.Cache, config *config.AppSettings) MainModel {
 		favorites:      NewFavoritesModel(),
 		cloneInput:     NewCloneInputModel(),
 		cloning:        NewCloningModel(),
+		pushInput:      NewPushInputModel(),
+		pushing:        NewPushingModel(),
 		notifications:  NewNotificationsModel(),
 		dashboard:      NewDashboardModel(),
 		tree:           NewTreeModel(nil),
@@ -201,15 +207,17 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateHistory
 			case 4: // Clone Repository
 				m.state = stateCloneInput
-			case 5: // Notifications
+			case 5: // Push to GitHub
+				m.state = statePushInput
+			case 6: // Notifications
 				m.state = stateNotifications
-			case 6: // Monitoring
+			case 7: // Monitoring
 				m.state = stateMonitorDashboard
-			case 7: // Settings
+			case 8: // Settings
 				m.state = stateSettings
-			case 8: // Help
+			case 9: // Help
 				m.state = stateHelp
-			case 9: // Exit
+			case 10: // Exit
 				return m, tea.Quit
 			}
 			m.menu.Done = false
@@ -617,6 +625,40 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case statePushInput:
+		newPushInput, cmd := m.pushInput.Update(msg)
+		m.pushInput = newPushInput
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		switch msg := msg.(type) {
+		case PushRepoMsg:
+			m.state = statePushing
+			m.pushing.SetRepoName(msg.RepoName)
+			cmds = append(cmds, m.pushRepo(msg.LocalPath, msg.RepoName), m.pushing.spinner.Tick)
+		case BackToMenuMsg:
+			m.state = stateMenu
+		}
+
+	case statePushing:
+		var cmd tea.Cmd
+		m.pushing, cmd = m.pushing.Update(msg)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+
+		if result, ok := msg.(pushResult); ok {
+			if result.err != nil {
+				m.err = result.err
+				m.state = statePushInput
+			} else {
+				m.err = fmt.Errorf("✓ Pushed successfully to: %s", m.pushInput.RepoName)
+				m.state = stateMenu
+				m.pushInput = NewPushInputModel()
+			}
+		}
+
 	case stateNotifications:
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -743,6 +785,10 @@ func (m MainModel) View() string {
 		return m.cloneInput.View(m.windowWidth, m.windowHeight)
 	case stateCloning:
 		return m.cloning.View(m.windowWidth, m.windowHeight)
+	case statePushInput:
+		return m.pushInput.View(m.windowWidth, m.windowHeight)
+	case statePushing:
+		return m.pushing.View(m.windowWidth, m.windowHeight)
 	case stateNotifications:
 		return m.notifications.View()
 	case stateMonitorDashboard:
@@ -1306,4 +1352,109 @@ func (m *MainModel) SetStateMonitorDashboard(owner, repo string, interval time.D
 	m.state = stateMonitorDashboard
 	m.monitorDashboard = NewMonitorDashboardModel(owner, repo, interval)
 	m.initialCmd = m.monitorDashboard.Init()
+}
+
+type pushResult struct {
+	err error
+}
+
+func (m MainModel) pushRepo(localPath, repoName string) tea.Cmd {
+	return func() tea.Msg {
+		parts := strings.Split(repoName, "/")
+		if len(parts) != 2 {
+			return pushResult{err: fmt.Errorf("invalid repository: must be in owner/repo format")}
+		}
+
+		// Check if local folder exists
+		if _, err := os.Stat(localPath); os.IsNotExist(err) {
+			return pushResult{err: fmt.Errorf("local folder does not exist: %s", localPath)}
+		}
+
+		// 1. Initialize git if .git directory does not exist
+		gitDir := filepath.Join(localPath, ".git")
+		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+			cmdInit := exec.Command("git", "init")
+			cmdInit.Dir = localPath
+			if err := cmdInit.Run(); err != nil {
+				return pushResult{err: fmt.Errorf("failed to initialize git: %w", err)}
+			}
+		}
+
+		// 2. Check current branch, or default to main
+		cmdBranch := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+		cmdBranch.Dir = localPath
+		branchBytes, err := cmdBranch.Output()
+		branch := "main"
+		if err == nil {
+			b := strings.TrimSpace(string(branchBytes))
+			if b != "" && b != "HEAD" {
+				branch = b
+			}
+		}
+
+		// 3. Stage and commit files
+		cmdStatus := exec.Command("git", "status", "--porcelain")
+		cmdStatus.Dir = localPath
+		statusBytes, _ := cmdStatus.Output()
+		if len(strings.TrimSpace(string(statusBytes))) > 0 {
+			cmdAdd := exec.Command("git", "add", ".")
+			cmdAdd.Dir = localPath
+			if err := cmdAdd.Run(); err != nil {
+				return pushResult{err: fmt.Errorf("failed to stage files: %w", err)}
+			}
+
+			cmdCommit := exec.Command("git", "commit", "-m", "Initial commit via Repo-lyzer")
+			cmdCommit.Dir = localPath
+			_ = cmdCommit.Run() // ignore error if there is nothing to commit
+		}
+
+		// 4. Set remote URL with token if token is configured
+		settings, err := config.LoadSettings()
+		var originalURL string
+		hasCustomRemote := false
+
+		// Try to read remote origin URL
+		cmdGetRemote := exec.Command("git", "remote", "get-url", "origin")
+		cmdGetRemote.Dir = localPath
+		origBytes, errGet := cmdGetRemote.Output()
+		hasOrigin := errGet == nil
+
+		repoURL := fmt.Sprintf("https://github.com/%s/%s.git", parts[0], parts[1])
+		if err == nil && settings.GitHubToken != "" {
+			repoURL = fmt.Sprintf("https://%s@github.com/%s/%s.git", settings.GitHubToken, parts[0], parts[1])
+		}
+
+		if hasOrigin {
+			originalURL = strings.TrimSpace(string(origBytes))
+			cmdSetRemote := exec.Command("git", "remote", "set-url", "origin", repoURL)
+			cmdSetRemote.Dir = localPath
+			if err := cmdSetRemote.Run(); err == nil {
+				hasCustomRemote = true
+			}
+		} else {
+			cmdAddRemote := exec.Command("git", "remote", "add", "origin", repoURL)
+			cmdAddRemote.Dir = localPath
+			if err := cmdAddRemote.Run(); err != nil {
+				return pushResult{err: fmt.Errorf("failed to add remote origin: %w", err)}
+			}
+		}
+
+		// Clean up remote URL if we temporarily added/modified it with a token
+		defer func() {
+			if hasCustomRemote && originalURL != "" {
+				cmdRestore := exec.Command("git", "remote", "set-url", "origin", originalURL)
+				cmdRestore.Dir = localPath
+				_ = cmdRestore.Run()
+			}
+		}()
+
+		// 5. Push to remote
+		cmdPush := exec.Command("git", "push", "-u", "origin", branch)
+		cmdPush.Dir = localPath
+		if err := cmdPush.Run(); err != nil {
+			return pushResult{err: fmt.Errorf("failed to push to GitHub: %w", err)}
+		}
+
+		return pushResult{err: nil}
+	}
 }
