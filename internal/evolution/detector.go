@@ -73,7 +73,7 @@ func (d *Detector) AnalyzeComplexityGrowth(timeline TimelineView) ComplexityRepo
 	}
 
 	// TODO: Implement complexity growth analysis
-	fmt.Println("[PARTIAL] Contributor evolution tracking is under development")
+	fmt.Println("[PARTIAL] Complexity growth analysis is under development")
 	return report
 }
 
