@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -359,7 +360,7 @@ func (m FileEditModel) pushToGitHub() tea.Cmd {
 			token = settings.GitHubToken
 		}
 
-		errPush := gitpush.PushRepo(gitpush.PushOptions{
+		errPush := gitpush.PushRepo(context.Background(), gitpush.PushOptions{
 			LocalPath: m.clonePath,
 			RepoOwner: m.repoOwner,
 			RepoName:  m.repoName,

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -77,7 +78,7 @@ Examples:
 			token = os.Getenv("GITHUB_TOKEN")
 		}
 
-		errPush := gitpush.PushRepo(gitpush.PushOptions{
+		errPush := gitpush.PushRepo(context.Background(), gitpush.PushOptions{
 			LocalPath: localPath,
 			RepoOwner: owner,
 			RepoName:  repo,

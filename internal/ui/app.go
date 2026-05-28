@@ -651,6 +651,7 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if result, ok := msg.(pushResult); ok {
 			if result.err != nil {
+				m.pushInput.Err = result.err
 				m.err = result.err
 				m.state = statePushInput
 			} else {
@@ -1377,7 +1378,7 @@ func (m MainModel) pushRepo(localPath, repoName string) tea.Cmd {
 			token = settings.GitHubToken
 		}
 
-		errPush := gitpush.PushRepo(gitpush.PushOptions{
+		errPush := gitpush.PushRepo(context.Background(), gitpush.PushOptions{
 			LocalPath: localPath,
 			RepoOwner: parts[0],
 			RepoName:  parts[1],
