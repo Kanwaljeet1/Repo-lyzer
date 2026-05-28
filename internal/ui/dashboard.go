@@ -43,9 +43,9 @@ type DashboardModel struct {
 	cacheStatus       string // "fresh", "cached", or ""
 	
 	// Precalculated fields for performance
-	precalcOverviewChart string
-	precalcActivityChart string
-	apiStatusMsg         string
+	// Precalculated fields for performance
+	precalcActivity map[string]int
+	apiStatusMsg    string
 	isFetchingAPI        bool
 }
 
@@ -60,9 +60,7 @@ func (m DashboardModel) Init() tea.Cmd { return nil }
 func (m *DashboardModel) SetData(data AnalysisResult) {
 	m.data = data
 	// Precalculate heavy charts
-	activity := analyzer.CommitsPerDay(m.data.Commits)
-	m.precalcOverviewChart = RenderCommitActivity(activity, 15)
-	m.precalcActivityChart = RenderCommitActivity(activity, 40)
+	m.precalcActivity = analyzer.CommitsPerDay(m.data.Commits)
 	
 	if m.data.ContributorInsights == nil && len(m.data.Contributors) > 0 {
 		m.data.ContributorInsights = analyzer.AnalyzeContributors(m.data.Contributors)
@@ -376,7 +374,7 @@ func (m DashboardModel) overviewView() string {
 
 	chartBox := CardStyle.Render(lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.NewStyle().Bold(true).Render("Activity Trend"),
-		"\n"+m.precalcOverviewChart,
+		"\n"+RenderCommitActivity(m.precalcActivity, 15),
 	))
 	riskPanel := m.riskAlertsView()
 
@@ -500,7 +498,7 @@ func (m DashboardModel) languagesView() string {
 
 func (m DashboardModel) activityView() string {
 	header := TitleStyle.Render(" Commit Activity ")
-	chart := m.precalcActivityChart
+	chart := RenderCommitActivity(m.precalcActivity, 40)
 	totalCommits := len(m.data.Commits)
 	stats := fmt.Sprintf("\nTotal Commits (Last Year): %d", totalCommits)
 
@@ -817,7 +815,7 @@ func fetchAPIStatusCmd() tea.Cmd {
 					"Used:      %.1f%%\n"+
 					"Reset:     %s",
 				status,
-				rateLimit.Resources.Core.Limit-rateLimit.Resources.Core.Remaining,
+				rateLimit.Resources.Core.Remaining,
 				rateLimit.Resources.Core.Limit,
 				usage,
 				resetTime,

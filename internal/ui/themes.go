@@ -170,7 +170,7 @@ func ApplyTheme(theme Theme) {
 	BoxStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(theme.Border).
-		Padding(1, 4)
+		Padding(1, 3)
 
 	CardStyle = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
