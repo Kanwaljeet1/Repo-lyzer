@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -26,9 +25,11 @@ func PushRepo(parentCtx context.Context, opts PushOptions) error {
 	ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 	defer cancel()
 
-	// 1. Initialize git if .git directory does not exist
-	gitDir := filepath.Join(opts.LocalPath, ".git")
-	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+	// 1. Initialize git if not already inside a git worktree
+	cmdIsRepo := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree")
+	cmdIsRepo.Dir = opts.LocalPath
+	out, err := cmdIsRepo.Output()
+	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		cmdInit := exec.CommandContext(ctx, "git", "init")
 		cmdInit.Dir = opts.LocalPath
 		if err := cmdInit.Run(); err != nil {
@@ -72,7 +73,13 @@ func PushRepo(parentCtx context.Context, opts PushOptions) error {
 	// 3. Stage and commit files
 	cmdStatus := exec.CommandContext(ctx, "git", "status", "--porcelain")
 	cmdStatus.Dir = opts.LocalPath
-	statusBytes, _ := cmdStatus.Output()
+	statusBytes, errStatus := cmdStatus.Output()
+	if errStatus != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("failed to inspect working tree: %w: %v", errStatus, ctx.Err())
+		}
+		return fmt.Errorf("failed to inspect working tree: %w", errStatus)
+	}
 	if len(strings.TrimSpace(string(statusBytes))) > 0 {
 		cmdAdd := exec.CommandContext(ctx, "git", "add", ".")
 		cmdAdd.Dir = opts.LocalPath
@@ -89,7 +96,15 @@ func PushRepo(parentCtx context.Context, opts PushOptions) error {
 		}
 		cmdCommit := exec.CommandContext(ctx, "git", "commit", "-m", commitMsg)
 		cmdCommit.Dir = opts.LocalPath
-		_ = cmdCommit.Run() // ignore error if there is nothing to commit
+		if output, err := cmdCommit.CombinedOutput(); err != nil {
+			outStr := string(output)
+			if !strings.Contains(strings.ToLower(outStr), "nothing to commit") && !strings.Contains(strings.ToLower(outStr), "working tree clean") {
+				if ctx.Err() != nil {
+					return fmt.Errorf("failed to commit changes: %s: %w: %v", strings.TrimSpace(outStr), err, ctx.Err())
+				}
+				return fmt.Errorf("failed to commit changes: %s: %w", strings.TrimSpace(outStr), err)
+			}
+		}
 	}
 
 	// 4. Remote configuration
