@@ -3,9 +3,9 @@ package ui
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/agnivo988/Repo-lyzer/internal/pathutil"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -28,36 +28,6 @@ type PushRepoMsg struct {
 	RepoName  string
 }
 
-func cleanAndResolvePath(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", fmt.Errorf("path cannot be empty")
-	}
-
-	if strings.HasPrefix(path, "~") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
-	}
-
-	// Fix common user typos where they omit the leading slash on absolute Unix paths
-	if !strings.HasPrefix(path, "/") && !strings.HasPrefix(path, ".") && !strings.HasPrefix(path, "~") {
-		slashed := "/" + path
-		if stat, err := os.Stat(slashed); err == nil && stat.IsDir() {
-			path = slashed
-		}
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve absolute path: %w", err)
-	}
-
-	return filepath.Clean(absPath), nil
-}
-
 func (m PushInputModel) Update(msg tea.Msg) (PushInputModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -65,7 +35,7 @@ func (m PushInputModel) Update(msg tea.Msg) (PushInputModel, tea.Cmd) {
 		case tea.KeyEnter:
 			if m.Step == 0 {
 				if m.LocalPath != "" {
-					resolvedPath, err := cleanAndResolvePath(m.LocalPath)
+					resolvedPath, err := pathutil.CleanAndResolvePath(m.LocalPath)
 					if err != nil {
 						m.Err = err
 					} else {

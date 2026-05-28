@@ -18,6 +18,7 @@ import (
 	"github.com/agnivo988/Repo-lyzer/internal/config"
 	"github.com/agnivo988/Repo-lyzer/internal/contribution"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
+	"github.com/agnivo988/Repo-lyzer/internal/gitpush"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -1370,91 +1371,20 @@ func (m MainModel) pushRepo(localPath, repoName string) tea.Cmd {
 			return pushResult{err: fmt.Errorf("local folder does not exist: %s", localPath)}
 		}
 
-		// 1. Initialize git if .git directory does not exist
-		gitDir := filepath.Join(localPath, ".git")
-		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-			cmdInit := exec.Command("git", "init")
-			cmdInit.Dir = localPath
-			if err := cmdInit.Run(); err != nil {
-				return pushResult{err: fmt.Errorf("failed to initialize git: %w", err)}
-			}
-		}
-
-		// 2. Check current branch, or default to main
-		cmdBranch := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-		cmdBranch.Dir = localPath
-		branchBytes, err := cmdBranch.Output()
-		branch := "main"
-		if err == nil {
-			b := strings.TrimSpace(string(branchBytes))
-			if b != "" && b != "HEAD" {
-				branch = b
-			}
-		}
-
-		// 3. Stage and commit files
-		cmdStatus := exec.Command("git", "status", "--porcelain")
-		cmdStatus.Dir = localPath
-		statusBytes, _ := cmdStatus.Output()
-		if len(strings.TrimSpace(string(statusBytes))) > 0 {
-			cmdAdd := exec.Command("git", "add", ".")
-			cmdAdd.Dir = localPath
-			if err := cmdAdd.Run(); err != nil {
-				return pushResult{err: fmt.Errorf("failed to stage files: %w", err)}
-			}
-
-			cmdCommit := exec.Command("git", "commit", "-m", "Initial commit via Repo-lyzer")
-			cmdCommit.Dir = localPath
-			_ = cmdCommit.Run() // ignore error if there is nothing to commit
-		}
-
-		// 4. Set remote URL with token if token is configured
 		settings, err := config.LoadSettings()
-		var originalURL string
-		hasCustomRemote := false
-
-		// Try to read remote origin URL
-		cmdGetRemote := exec.Command("git", "remote", "get-url", "origin")
-		cmdGetRemote.Dir = localPath
-		origBytes, errGet := cmdGetRemote.Output()
-		hasOrigin := errGet == nil
-
-		repoURL := fmt.Sprintf("https://github.com/%s/%s.git", parts[0], parts[1])
-		if err == nil && settings.GitHubToken != "" {
-			repoURL = fmt.Sprintf("https://%s@github.com/%s/%s.git", settings.GitHubToken, parts[0], parts[1])
+		token := ""
+		if err == nil {
+			token = settings.GitHubToken
 		}
 
-		if hasOrigin {
-			originalURL = strings.TrimSpace(string(origBytes))
-			cmdSetRemote := exec.Command("git", "remote", "set-url", "origin", repoURL)
-			cmdSetRemote.Dir = localPath
-			if err := cmdSetRemote.Run(); err == nil {
-				hasCustomRemote = true
-			}
-		} else {
-			cmdAddRemote := exec.Command("git", "remote", "add", "origin", repoURL)
-			cmdAddRemote.Dir = localPath
-			if err := cmdAddRemote.Run(); err != nil {
-				return pushResult{err: fmt.Errorf("failed to add remote origin: %w", err)}
-			}
-		}
+		errPush := gitpush.PushRepo(gitpush.PushOptions{
+			LocalPath: localPath,
+			RepoOwner: parts[0],
+			RepoName:  parts[1],
+			CommitMsg: "Push via Repo-lyzer",
+			Token:     token,
+		})
 
-		// Clean up remote URL if we temporarily added/modified it with a token
-		defer func() {
-			if hasCustomRemote && originalURL != "" {
-				cmdRestore := exec.Command("git", "remote", "set-url", "origin", originalURL)
-				cmdRestore.Dir = localPath
-				_ = cmdRestore.Run()
-			}
-		}()
-
-		// 5. Push to remote
-		cmdPush := exec.Command("git", "push", "-u", "origin", branch)
-		cmdPush.Dir = localPath
-		if err := cmdPush.Run(); err != nil {
-			return pushResult{err: fmt.Errorf("failed to push to GitHub: %w", err)}
-		}
-
-		return pushResult{err: nil}
+		return pushResult{err: errPush}
 	}
 }
