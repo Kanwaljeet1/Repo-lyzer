@@ -69,32 +69,35 @@ Examples:
 			format = "terminal"
 		}
 
-		// Parse repo names
-		r1 := strings.Split(args[0], "/")
-		r2 := strings.Split(args[1], "/")
+		// Validate and parse repo names using shared helper
+		owner1, repo1, err := validateRepoURL(args[0])
+		if err != nil {
+			return fmt.Errorf("invalid repository '%s': %w", args[0], err)
+		}
 
-		if len(r1) != 2 || len(r2) != 2 {
-			return fmt.Errorf("repositories must be in owner/repo format")
+		owner2, repo2, err := validateRepoURL(args[1])
+		if err != nil {
+			return fmt.Errorf("invalid repository '%s': %w", args[1], err)
 		}
 
 		client := github.NewClient()
 		spinner := progress.NewSpinner()
 
-		spinner.Start(fmt.Sprintf("🔍 Analyzing %s/%s...", r1[0], r1[1]))
-		side1, err := fetchCompareInput(client, r1[0], r1[1])
+		spinner.Start(fmt.Sprintf("🔍 Analyzing %s/%s...", owner1, repo1))
+		side1, err := fetchCompareInput(client, owner1, repo1)
 		if err != nil {
 			spinner.Stop()
 			return err
 		}
-		spinner.StopWithMessage(fmt.Sprintf("Analyzed %s/%s", r1[0], r1[1]))
+		spinner.StopWithMessage(fmt.Sprintf("Analyzed %s/%s", owner1, repo1))
 
-		spinner.Start(fmt.Sprintf("🔍 Analyzing %s/%s...", r2[0], r2[1]))
-		side2, err := fetchCompareInput(client, r2[0], r2[1])
+		spinner.Start(fmt.Sprintf("🔍 Analyzing %s/%s...", owner2, repo2))
+		side2, err := fetchCompareInput(client, owner2, repo2)
 		if err != nil {
 			spinner.Stop()
 			return err
 		}
-		spinner.StopWithMessage(fmt.Sprintf("Analyzed %s/%s", r2[0], r2[1]))
+		spinner.StopWithMessage(fmt.Sprintf("Analyzed %s/%s", owner2, repo2))
 
 		report := output.BuildCompareReport(side1, side2)
 
