@@ -257,7 +257,7 @@ func (c *Cache) Set(repoName string, analysis interface{}) error {
 }
 
 // SetWithMetadata stores an analysis result and incremental metadata in the cache.
-func (c *Cache) SetWithMetadata(repoName string, analysis interface{}, metadata map[string]string) error {
+func (c *Cache) SetWithMetadata(repoName string, analysis interface{}, metadata map[string]FileMetadata) error {
 	return c.SetWithTTLAndMetadata(repoName, analysis, c.config.TTL, metadata)
 }
 
@@ -267,7 +267,7 @@ func (c *Cache) SetWithTTL(repoName string, analysis interface{}, ttl time.Durat
 }
 
 // SetWithTTLAndMetadata stores an analysis result and incremental metadata in the cache with an explicit TTL.
-func (c *Cache) SetWithTTLAndMetadata(repoName string, analysis interface{}, ttl time.Duration, metadata map[string]string) error {
+func (c *Cache) SetWithTTLAndMetadata(repoName string, analysis interface{}, ttl time.Duration, metadata map[string]FileMetadata) error {
 	if !c.config.Enabled || !c.config.AutoCache {
 		return nil
 	}
@@ -280,7 +280,7 @@ func (c *Cache) SetWithTTLAndMetadata(repoName string, analysis interface{}, ttl
 
 	now := time.Now()
 	if metadata == nil {
-		metadata = make(map[string]string)
+		metadata = make(map[string]FileMetadata)
 	}
 
 	entry := CacheEntry{
