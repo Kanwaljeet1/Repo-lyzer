@@ -145,6 +145,51 @@ func NewMainModel(cache *cache.Cache, config *config.AppSettings) MainModel {
 	}
 }
 
+func analysisTypeForSubmenu(index int) string {
+	switch index {
+	case 0:
+		return "quick"
+	case 1:
+		return "detailed"
+	case 2:
+		return "custom"
+	default:
+		return ""
+	}
+}
+
+func settingsOptionForSubmenu(index int) string {
+	switch index {
+	case 0:
+		return "theme"
+	case 1:
+		return "cache"
+	case 2:
+		return "export"
+	case 3:
+		return "token"
+	case 4:
+		return "reset"
+	default:
+		return ""
+	}
+}
+
+func helpContentForSubmenu(index int) string {
+	switch index {
+	case 0:
+		return "shortcuts"
+	case 1:
+		return "getting-started"
+	case 2:
+		return "features"
+	case 3:
+		return "troubleshooting"
+	default:
+		return ""
+	}
+}
+
 // Init initializes the Bubble Tea program
 func (m MainModel) Init() tea.Cmd {
 	return m.initialCmd
@@ -206,6 +251,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.menu.Done {
 			switch m.menu.SelectedOption {
 			case 0: // Analyze Repository
+				m.analysisType = analysisTypeForSubmenu(m.menu.SelectedSubmenuOption)
+				m.loading.SetAnalysisType(m.analysisType)
 				m.state = stateInput
 			case 1: // Favorites
 				m.state = stateFavorites
@@ -220,8 +267,16 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 6: // Monitoring
 				m.state = stateMonitorDashboard
 			case 7: // Settings
+				m.settingsOption = settingsOptionForSubmenu(m.menu.SelectedSubmenuOption)
+				m.settings.settingsOption = m.settingsOption
+				m.inTokenInput = false
+				m.tokenInput = ""
+				m.settings.inTokenInput = false
+				m.settings.tokenInput = ""
 				m.state = stateSettings
 			case 8: // Help
+				m.helpContent = helpContentForSubmenu(m.menu.SelectedSubmenuOption)
+				m.help.SetHelpContent(m.helpContent)
 				m.state = stateHelp
 			case 9: // Exit
 				return m, tea.Quit
@@ -502,6 +557,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case tea.KeyRunes:
 					m.tokenInput += string(msg.Runes)
 				}
+				m.settings.inTokenInput = m.inTokenInput
+				m.settings.tokenInput = m.tokenInput
 				return m, tea.Batch(cmds...)
 			}
 
@@ -577,6 +634,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.settingsOption == "token" {
 					m.inTokenInput = true
 					m.tokenInput = ""
+					m.settings.inTokenInput = true
+					m.settings.tokenInput = ""
 				}
 			case "y":
 				// Confirm reset (reset settings)
