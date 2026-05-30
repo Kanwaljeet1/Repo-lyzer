@@ -23,10 +23,11 @@ func TestPRVelocityAnalyzer_AnalyzePRVelocity(t *testing.T) {
 	})
 
 	t.Run("Healthy PRs", func(t *testing.T) {
-		mergedAt := now.Add(-1 * time.Hour) // Fast merge
+		mergedAt1 := now.Add(-1 * time.Hour) // Fast merge
+		mergedAt2 := now.Add(-1 * time.Hour) // Fast merge
 		pulls := []github.PullRequest{
-			{State: "closed", CreatedAt: now.Add(-2 * time.Hour), MergedAt: &mergedAt},
-			{State: "closed", CreatedAt: now.Add(-3 * time.Hour), MergedAt: &mergedAt},
+			{State: "closed", CreatedAt: now.Add(-2 * time.Hour), MergedAt: &mergedAt1},
+			{State: "closed", CreatedAt: now.Add(-3 * time.Hour), MergedAt: &mergedAt2},
 		}
 
 		score, category := analyzer.AnalyzePRVelocity(pulls)

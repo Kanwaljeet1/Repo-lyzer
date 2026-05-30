@@ -12,8 +12,8 @@ import (
 type TerminalRenderer struct {
 	CriticalColor *color.Color
 	WarningColor  *color.Color
-	HealthyColor  *color.Color
-	ExcelColor    *color.Color
+	HealthyColor   *color.Color
+	ExcellentColor *color.Color
 }
 
 // NewTerminalRenderer initializes a customized terminal renderer
@@ -21,8 +21,8 @@ func NewTerminalRenderer() *TerminalRenderer {
 	return &TerminalRenderer{
 		CriticalColor: color.New(color.FgRed, color.Bold),
 		WarningColor:  color.New(color.FgYellow, color.Bold),
-		HealthyColor:  color.New(color.FgGreen, color.Bold),
-		ExcelColor:    color.New(color.FgHiCyan, color.Bold),
+		HealthyColor:   color.New(color.FgGreen, color.Bold),
+		ExcellentColor: color.New(color.FgHiCyan, color.Bold),
 	}
 }
 
@@ -36,7 +36,7 @@ func (t *TerminalRenderer) RenderCategory(category core.ScoreCategory) string {
 	case core.Healthy:
 		return t.HealthyColor.Sprint("HEALTHY")
 	case core.Excellent:
-		return t.ExcelColor.Sprint("EXCELLENT")
+		return t.ExcellentColor.Sprint("EXCELLENT")
 	default:
 		return string(category)
 	}
@@ -69,7 +69,9 @@ func (t *TerminalRenderer) RenderScoreCard(title string, score float64, category
 	case core.Healthy:
 		coloredPulse = t.HealthyColor.Sprint(pulseBar)
 	case core.Excellent:
-		coloredPulse = t.ExcelColor.Sprint(pulseBar)
+		coloredPulse = t.ExcellentColor.Sprint(pulseBar)
+	default:
+		coloredPulse = pulseBar
 	}
 
 	fmt.Printf("Health: %s  %s  (Status: %s)\n", scoreStr, coloredPulse, t.RenderCategory(category))

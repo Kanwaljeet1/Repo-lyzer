@@ -1,6 +1,8 @@
 package health
 
 import (
+	"sort"
+
 	"github.com/agnivo988/Repo-lyzer/internal/analyzer/core"
 	"github.com/agnivo988/Repo-lyzer/internal/github"
 )
@@ -37,6 +39,11 @@ func (b *BusFactorAnalyzer) AnalyzeContributorStability(contributors []github.Co
 
 	// 1. Bus Factor Score
 	// Calculates the minimum number of contributors required to account for >50% of the commits
+	// Sort contributors by descending commit count to correctly compute bus factor and top ratio
+	sort.Slice(contributors, func(i, j int) bool {
+		return contributors[i].Commits > contributors[j].Commits
+	})
+
 	commitsCount := 0
 	busFactor := 0
 

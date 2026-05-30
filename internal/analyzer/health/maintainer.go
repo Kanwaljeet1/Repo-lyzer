@@ -122,7 +122,7 @@ func (m *MaintainerAnalyzer) AnalyzeMaintainerActivity(
 	stalePRsCount := 0
 	if len(pulls) > 0 {
 		for _, pr := range pulls {
-			if pr.State == "open" && now.Sub(pr.CreatedAt).Hours()/24 > 90 {
+			if pr.State == "open" && now.Sub(pr.UpdatedAt).Hours()/24 > 90 {
 				stalePRsCount++
 			}
 		}
