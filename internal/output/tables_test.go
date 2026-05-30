@@ -45,17 +45,18 @@ func TestPrintRepo(t *testing.T) {
 	}
 
 	output := out.String()
+	outputUpper := strings.ToUpper(output)
 	for _, expected := range []string{
-		"Repository",
-		"Stars",
-		"Forks",
-		"Open Issues",
+		"REPOSITORY",
+		"STARS",
+		"FORKS",
+		"OPEN ISSUES",
 		"owner/example",
 		"120",
 		"18",
 		"7",
 	} {
-		if !strings.Contains(output, expected) {
+		if !strings.Contains(outputUpper, expected) {
 			t.Fatalf("expected output to contain %q, got:\n%s", expected, output)
 		}
 	}
