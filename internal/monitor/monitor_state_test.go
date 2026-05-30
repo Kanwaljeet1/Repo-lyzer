@@ -46,8 +46,8 @@ func TestMonitorState_SaveLoadRoundTrip(t *testing.T) {
 			Owner:                "octocat",
 			Repo:                 "hello-world",
 			LastCommitSHA:        "abcdef123456",
-			LastIssueID:          4,
-			LastPRID:             2,
+			LastIssueCount:       4,
+			LastPRCount:          2,
 			LastContributorCount: 7,
 			LastUpdated:          timestamp,
 		},
@@ -71,8 +71,11 @@ func TestMonitorState_SaveLoadRoundTrip(t *testing.T) {
 	if restored.state.LastCommitSHA != "abcdef123456" {
 		t.Fatalf("LastCommitSHA = %q, want %q", restored.state.LastCommitSHA, "abcdef123456")
 	}
-	if restored.state.LastIssueID != 4 {
-		t.Fatalf("LastIssueID = %d, want 4", restored.state.LastIssueID)
+	if restored.state.LastIssueCount != 4 {
+		t.Fatalf("LastIssueCount = %d, want 4", restored.state.LastIssueCount)
+	}
+	if restored.state.LastPRCount != 2 {
+		t.Fatalf("LastPRCount = %d, want 2", restored.state.LastPRCount)
 	}
 	if restored.state.LastContributorCount != 7 {
 		t.Fatalf("LastContributorCount = %d, want 7", restored.state.LastContributorCount)

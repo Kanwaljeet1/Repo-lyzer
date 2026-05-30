@@ -22,8 +22,8 @@ type MonitorState struct {
 	Owner                string    `json:"owner"`
 	Repo                 string    `json:"repo"`
 	LastCommitSHA        string    `json:"last_commit_sha"`
-	LastIssueID          int       `json:"last_issue_id"`
-	LastPRID             int       `json:"last_pr_id"`
+	LastIssueCount       int       `json:"last_issue_id"`
+	LastPRCount          int       `json:"last_pr_id"`
 	LastContributorCount int       `json:"last_contributor_count"`
 	LastUpdated          time.Time `json:"last_updated"`
 }
@@ -188,7 +188,29 @@ func (m *Monitor) checkCommits() {
 	}
 }
 
-// checkIssues monitors for new issues
+// countIssues returns the number of true issues (PullRequest == nil) in the list.
+func countIssues(items []github.Issue) int {
+	count := 0
+	for _, item := range items {
+		if item.PullRequest == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// countPRs returns the number of pull requests (PullRequest != nil) in the list.
+func countPRs(items []github.Issue) int {
+	count := 0
+	for _, item := range items {
+		if item.PullRequest != nil {
+			count++
+		}
+	}
+	return count
+}
+
+// checkIssues monitors for new issues (excludes pull requests)
 func (m *Monitor) checkIssues() {
 	issues, err := m.client.GetIssues(m.owner, m.repo, "open")
 	if err != nil {
@@ -196,40 +218,43 @@ func (m *Monitor) checkIssues() {
 		return
 	}
 
-	// Check if the number of issues has changed
-	if len(issues) != m.state.LastIssueID {
+	actualIssuesCount := countIssues(issues)
+
+	// Only notify when the count actually changes
+	if actualIssuesCount != m.state.LastIssueCount {
 		notification := Notification{
 			Type:      "issue",
 			Title:     "Issues Update",
-			Message:   fmt.Sprintf("Repository has %d open issues", len(issues)),
+			Message:   fmt.Sprintf("Repository has %d open issues", actualIssuesCount),
 			Timestamp: time.Now(),
 			Severity:  "info",
 		}
 		m.notifications <- notification
-		m.state.LastIssueID = len(issues)
+		m.state.LastIssueCount = actualIssuesCount
 	}
 }
 
-// checkPullRequests monitors for new pull requests
+// checkPullRequests monitors for new pull requests (filtered and state-tracked)
 func (m *Monitor) checkPullRequests() {
-	// For now, we'll use the same issues endpoint since PRs are a type of issue
-	// In a full implementation, we'd filter for pull requests specifically
-	prs, err := m.client.GetIssues(m.owner, m.repo, "open")
+	issues, err := m.client.GetIssues(m.owner, m.repo, "open")
 	if err != nil {
 		log.Printf("Failed to get pull requests: %v", err)
 		return
 	}
 
-	if len(prs) != m.state.LastPRID {
+	actualPRCount := countPRs(issues)
+
+	// Only notify when the PR count actually changes
+	if actualPRCount != m.state.LastPRCount {
 		notification := Notification{
 			Type:      "pr",
 			Title:     "Pull Requests Update",
-			Message:   fmt.Sprintf("Repository has %d open pull requests/issues", len(prs)),
+			Message:   fmt.Sprintf("Repository has %d open pull requests", actualPRCount),
 			Timestamp: time.Now(),
 			Severity:  "info",
 		}
 		m.notifications <- notification
-		m.state.LastPRID = len(prs)
+		m.state.LastPRCount = actualPRCount
 	}
 }
 
