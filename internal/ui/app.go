@@ -288,8 +288,12 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 7: // Monitoring
 				m.state = stateMonitorDashboard
 			case 8: // Settings
+				m.settingsOption = settingsOptionForSubmenu(m.menu.SelectedSubmenuOption)
+				m.settings.settingsOption = m.settingsOption
 				m.state = stateSettings
 			case 9: // Help
+				m.helpContent = helpContentForSubmenu(m.menu.SelectedSubmenuOption)
+				m.help.helpContent = m.helpContent
 				m.state = stateHelp
 			case 10: // Exit
 				return m, tea.Quit
