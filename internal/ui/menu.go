@@ -7,17 +7,19 @@ import (
 )
 
 type MenuModel struct {
-	cursor         int
-	choices        []string
-	SelectedOption int
-	Done           bool
-	width          int
-	height         int
-	inSubmenu      bool
-	submenuType    string
-	submenuCursor  int
-	submenuChoices []string
-	parentCursor   int
+	cursor                int
+	choices               []string
+	SelectedOption        int
+	SelectedSubmenuOption int
+	SelectedSubmenuType   string
+	Done                  bool
+	width                 int
+	height                int
+	inSubmenu             bool
+	submenuType           string
+	submenuCursor         int
+	submenuChoices        []string
+	parentCursor          int
 }
 
 type SubmenuOption struct {
@@ -40,7 +42,8 @@ func NewMenuModel() MenuModel {
 			"❓ Help",
 			"🚪 Exit",
 		},
-		inSubmenu: false,
+		inSubmenu:             false,
+		SelectedSubmenuOption: -1,
 	}
 }
 
@@ -110,15 +113,11 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.enterSubmenu()
 			} else if m.inSubmenu && idx < len(m.submenuChoices) {
 				m.submenuCursor = idx
-				m.SelectedOption = m.cursor
-				m.Done = true
-				m.inSubmenu = false
+				m.selectSubmenuOption()
 			}
 		case "enter", " ":
 			if m.inSubmenu {
-				m.SelectedOption = m.cursor
-				m.Done = true
-				m.inSubmenu = false
+				m.selectSubmenuOption()
 			} else {
 				m.enterSubmenu()
 			}
@@ -196,6 +195,9 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *MenuModel) enterSubmenu() {
+	m.SelectedSubmenuOption = -1
+	m.SelectedSubmenuType = ""
+
 	switch m.cursor {
 	case 0: // Analyze Repository
 		m.submenuType = "analyze"
@@ -208,21 +210,33 @@ func (m *MenuModel) enterSubmenu() {
 		m.submenuCursor = 0
 	case 1: // Favorites
 		m.SelectedOption = 1
+		m.SelectedSubmenuOption = -1
+		m.SelectedSubmenuType = ""
 		m.Done = true
 	case 2: // Compare Repositories
 		m.SelectedOption = 2
+		m.SelectedSubmenuOption = -1
+		m.SelectedSubmenuType = ""
 		m.Done = true
 	case 3: // View History
 		m.SelectedOption = 3
+		m.SelectedSubmenuOption = -1
+		m.SelectedSubmenuType = ""
 		m.Done = true
 	case 4: // Clone Repository
 		m.SelectedOption = 4
+		m.SelectedSubmenuOption = -1
+		m.SelectedSubmenuType = ""
 		m.Done = true
 	case 5: // Push to GitHub
 		m.SelectedOption = 5
+		m.SelectedSubmenuOption = -1
+		m.SelectedSubmenuType = ""
 		m.Done = true
 	case 6: // Notification
 		m.SelectedOption = 6
+		m.SelectedSubmenuOption = -1
+		m.SelectedSubmenuType = ""
 		m.Done = true
 	case 7: // Monitoring
 		m.SelectedOption = 7
@@ -252,6 +266,14 @@ func (m *MenuModel) enterSubmenu() {
 		m.SelectedOption = 10
 		m.Done = true
 	}
+}
+
+func (m *MenuModel) selectSubmenuOption() {
+	m.SelectedOption = m.cursor
+	m.SelectedSubmenuOption = m.submenuCursor
+	m.SelectedSubmenuType = m.submenuType
+	m.Done = true
+	m.inSubmenu = false
 }
 
 func (m MenuModel) View() string {

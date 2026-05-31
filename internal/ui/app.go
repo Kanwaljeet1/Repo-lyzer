@@ -152,6 +152,51 @@ func NewMainModel(cache *cache.Cache, config *config.AppSettings) MainModel {
 	}
 }
 
+func analysisTypeForSubmenu(index int) string {
+	switch index {
+	case 0:
+		return "quick"
+	case 1:
+		return "detailed"
+	case 2:
+		return "custom"
+	default:
+		return ""
+	}
+}
+
+func settingsOptionForSubmenu(index int) string {
+	switch index {
+	case 0:
+		return "theme"
+	case 1:
+		return "cache"
+	case 2:
+		return "export"
+	case 3:
+		return "token"
+	case 4:
+		return "reset"
+	default:
+		return ""
+	}
+}
+
+func helpContentForSubmenu(index int) string {
+	switch index {
+	case 0:
+		return "shortcuts"
+	case 1:
+		return "getting-started"
+	case 2:
+		return "features"
+	case 3:
+		return "troubleshooting"
+	default:
+		return ""
+	}
+}
+
 // Init initializes the Bubble Tea program
 func (m MainModel) Init() tea.Cmd {
 	return m.initialCmd
@@ -189,6 +234,20 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ErrorMsg:
 		m.err = error(msg)
 		return m, nil
+
+	case string:
+		// Global string messages from sub-models (dashboard returns "switch_to_tree")
+		if msg == "switch_to_tree" {
+			if len(m.dashboard.data.FileTree) > 0 {
+				m.tree = NewTreeModel(&m.dashboard.data)
+			} else {
+				m.tree = NewTreeModel(nil)
+			}
+			m.tree.width = m.windowWidth
+			m.tree.height = m.windowHeight
+			m.state = stateTree
+			return m, nil
+		}
 	}
 
 	// Delegate to current state's sub-model
@@ -199,6 +258,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.menu.Done {
 			switch m.menu.SelectedOption {
 			case 0: // Analyze Repository
+				m.analysisType = analysisTypeForSubmenu(m.menu.SelectedSubmenuOption)
+				m.loading.SetAnalysisType(m.analysisType)
 				m.state = stateInput
 			case 1: // Favorites
 				m.state = stateFavorites
@@ -497,6 +558,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case tea.KeyRunes:
 					m.tokenInput += string(msg.Runes)
 				}
+				m.settings.inTokenInput = m.inTokenInput
+				m.settings.tokenInput = m.tokenInput
 				return m, tea.Batch(cmds...)
 			}
 
@@ -572,6 +635,8 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.settingsOption == "token" {
 					m.inTokenInput = true
 					m.tokenInput = ""
+					m.settings.inTokenInput = true
+					m.settings.tokenInput = ""
 				}
 			case "y":
 				// Confirm reset (reset settings)
@@ -732,7 +797,11 @@ func (m MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.dashboard.data.Repo != nil && m.dashboard.data.Repo.FullName != "" {
 					repoName = m.dashboard.data.Repo.FullName
 				}
-				m.fileEdit = NewFileEditModel(m.tree.SelectedPath, repoName)
+				defaultBranch := "main"
+				if m.dashboard.data.Repo != nil && m.dashboard.data.Repo.DefaultBranch != "" {
+					defaultBranch = m.dashboard.data.Repo.DefaultBranch
+				}
+				m.fileEdit = NewFileEditModel(m.tree.SelectedPath, repoName, defaultBranch)
 
 				// Check ownership
 				isOwner := m.checkOwnership()
@@ -935,39 +1004,51 @@ func (m MainModel) analyzeRepo(ctx context.Context, repoName string) tea.Cmd {
 		}
 
 		// Build current file hash map for incremental analysis
-		currentHashes := make(map[string]string)
+		currentHashes := make(map[string]cache.FileMetadata)
 
 		for _, file := range fileTree {
-			// Skip directories
 			if file.Type != "blob" {
 				continue
 			}
 
-			// Store filepath -> SHA mapping
-			currentHashes[file.Path] = file.Sha
+			currentHashes[file.Path] = cache.FileMetadata{
+				SHA:        file.Sha,
+				AnalyzedAt: time.Now(),
+			}
 		}
 
 		// Compare with cached incremental metadata
 		changedFiles := []string{}
 
-		if entry, found := m.cache.Get(repoName); found {
-			if entry.IncrementalMetadata != nil {
+		if m.cache != nil {
+			if entry, found := m.cache.GetWithoutTTLExpiration(repoName); found {
+				if entry.IncrementalMetadata != nil {
 
-				for path, hash := range currentHashes {
-					cachedHash, exists := entry.IncrementalMetadata[path]
+					for path, currentMeta := range currentHashes {
+						cachedMeta, exists := entry.IncrementalMetadata[path]
 
-					// File is new or modified
-					if !exists || cachedHash != hash {
-						changedFiles = append(changedFiles, path)
+						// File is new or modified
+						if !exists || cachedMeta.SHA != currentMeta.SHA {
+							changedFiles = append(changedFiles, path)
+						}
 					}
-				}
 
-				fmt.Printf("🔄 Incremental analysis enabled\n")
-				fmt.Printf("📂 Changed files detected: %d\n", len(changedFiles))
+					fmt.Printf("🔄 Incremental analysis enabled\n")
+					fmt.Printf("📂 Changed files detected: %d\n", len(changedFiles))
 
-				// No changes detected
-				if len(changedFiles) == 0 {
-					fmt.Println("✅ No repository changes detected. Using cached analysis.")
+					// No changes detected
+					if len(changedFiles) == 0 {
+						fmt.Println("✅ No repository changes detected. Using cached analysis.")
+						var result AnalysisResult
+						if err := json.Unmarshal(entry.Analysis, &result); err == nil {
+							// Return cached result with status
+							return CachedAnalysisResult{
+								Result:   result,
+								IsCached: true,
+								CachedAt: entry.CachedAt,
+							}
+						}
+					}
 				}
 			}
 		}
@@ -1100,9 +1181,9 @@ func (m MainModel) analyzeRepo(ctx context.Context, repoName string) tea.Cmd {
 			ContributionScore:   contribScore,
 		}
 
-		// Save to cache
+		// Save to cache with file tree hashes metadata
 		if m.cache != nil {
-			m.cache.Set(repoName, result)
+			m.cache.SetWithMetadata(repoName, result, currentHashes)
 		}
 
 		// Add success notification
